@@ -19,6 +19,7 @@ except Exception as e:
     GROQ_IMPORT_ERROR = str(e)
     Groq = None
 from dotenv import load_dotenv
+import requests  # Add this import at the top
 
 # Try to import OpenCV, but continue if it fails
 try:
@@ -342,6 +343,42 @@ async def test_api_key(key: Optional[str] = None):
             return {"status": "error", "message": f"API key accepted but API call failed: {str(e)}"}
     except Exception as e:
         return {"status": "error", "message": f"Failed to initialize client: {str(e)}"}
+
+# Add this endpoint after the api-key-test endpoint
+@app.get("/direct-test")
+async def direct_test(key: Optional[str] = None):
+    """Test Groq API directly using requests instead of the groq client."""
+    if key is None:
+        key = os.getenv("GROQ_API_KEY")
+        if not key:
+            return {"status": "error", "message": "No API key provided and no GROQ_API_KEY in environment"}
+    
+    try:
+        # List models directly with API call
+        headers = {
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json"
+        }
+        
+        response = requests.get(
+            "https://api.groq.com/openai/v1/models",
+            headers=headers
+        )
+        
+        if response.status_code == 200:
+            return {
+                "status": "success", 
+                "message": "Successfully connected to Groq API",
+                "models": response.json()["data"][:5]  # Just show first 5 for brevity
+            }
+        else:
+            return {
+                "status": "error", 
+                "message": f"API error: {response.status_code}",
+                "details": response.text
+            }
+    except Exception as e:
+        return {"status": "error", "message": f"Error: {str(e)}"}
 
 # Add a custom wrapper for Groq client initialization to handle the proxies issue
 def create_groq_client(api_key):
