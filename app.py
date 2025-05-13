@@ -43,9 +43,13 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # Initialize Groq client with environment variable
 default_client = None
 try:
-    default_api_key = os.getenv("GROQ_API_KEY")
+    # Check for various possible environment variable names
+    default_api_key = os.getenv("GROQ_API_KEY") or os.getenv("groq_api_key") or os.getenv("Groq_Api_Key")
     if default_api_key:
+        print(f"Initializing Groq client with API key (length: {len(default_api_key)})")
         default_client = Groq(api_key=default_api_key)
+    else:
+        print("No Groq API key found in environment variables")
 except Exception as e:
     print(f"Error initializing default Groq client: {e}")
 
@@ -128,11 +132,13 @@ def analyze_image_with_llm(image_data: bytes, api_key: Optional[str] = None) -> 
     client = default_client
     if api_key:
         try:
+            print(f"Using custom API key provided in request header (length: {len(api_key)})")
             client = Groq(api_key=api_key)
         except Exception as e:
-            print(f"Error initializing custom Groq client: {e}")
+            print(f"Error initializing custom Groq client: {str(e)}")
     
     if client is None:
+        print("No Groq client available. Default client initialized: ", default_client is not None)
         raise HTTPException(status_code=500, detail="Groq client not initialized. Please check your API key.")
     
     # Convert image to base64
@@ -163,6 +169,7 @@ def analyze_image_with_llm(image_data: bytes, api_key: Optional[str] = None) -> 
     
     try:
         # Call the Groq API
+        print("Calling Groq API with model: meta-llama/llama-4-scout-17b-16e-instruct")
         completion = client.chat.completions.create(
             model="meta-llama/llama-4-scout-17b-16e-instruct",
             messages=messages,
@@ -175,7 +182,9 @@ def analyze_image_with_llm(image_data: bytes, api_key: Optional[str] = None) -> 
         # Return the model's response
         return completion.choices[0].message.content
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error calling Groq API: {str(e)}")
+        error_message = str(e)
+        print(f"Groq API error: {error_message}")
+        raise HTTPException(status_code=500, detail=f"Error calling Groq API: {error_message}")
 
 @app.get("/", response_class=HTMLResponse)
 async def get_web_app():
@@ -249,23 +258,41 @@ async def analyze_frame(
 async def health_check(x_groq_api_key: Optional[str] = Header(None)):
     """Health check endpoint."""
     client_status = False
+    api_key_info = None
+    error_details = None
     
     # Check if a custom API key was provided
     if x_groq_api_key:
         try:
+            print(f"Health check with custom API key (length: {len(x_groq_api_key)})")
             test_client = Groq(api_key=x_groq_api_key)
             # Just try to access a property to verify it's initialized properly
             _ = test_client.base_url
             client_status = True
+            api_key_info = "custom"
         except Exception as e:
-            print(f"Custom API key health check failed: {e}")
+            error_details = str(e)
+            print(f"Custom API key health check failed: {error_details}")
     else:
         # Check the default client
         client_status = default_client is not None
+        api_key_info = "default" if default_client else "none"
+        if not default_client:
+            error_details = "Default Groq client not initialized"
+    
+    # Check environment variables (without revealing the actual keys)
+    env_vars = {
+        "GROQ_API_KEY": os.getenv("GROQ_API_KEY") is not None,
+        "groq_api_key": os.getenv("groq_api_key") is not None,
+        "Groq_Api_Key": os.getenv("Groq_Api_Key") is not None
+    }
     
     return {
         "status": "ok", 
         "groq_client": client_status,
+        "api_key_source": api_key_info,
+        "environment_vars": env_vars,
+        "error": error_details,
         "opencv_available": CV2_AVAILABLE
     }
 
