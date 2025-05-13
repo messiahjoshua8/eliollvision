@@ -33,7 +33,7 @@ A real-time computer vision API that uses Groq and Meta's Llama 4 Scout model to
    ```
    python app.py
    ```
-5. Open `http://localhost:8000` in your browser
+5. Open `http://localhost:8080` in your browser
 
 ### Deployment on Railway
 
