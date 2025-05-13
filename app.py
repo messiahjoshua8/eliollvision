@@ -317,6 +317,32 @@ async def health_check(x_groq_api_key: Optional[str] = Header(None)):
         "opencv_available": CV2_AVAILABLE
     }
 
+@app.get("/api-key-test")
+async def test_api_key(key: Optional[str] = None):
+    """Test a specific API key or the environment variable."""
+    if key is None:
+        key = os.getenv("GROQ_API_KEY")
+        if not key:
+            return {"status": "error", "message": "No API key provided and no GROQ_API_KEY in environment"}
+    
+    if Groq is None:
+        return {"status": "error", "message": f"Groq module import error: {GROQ_IMPORT_ERROR}"}
+    
+    # Try to create a client and make a simple API call
+    try:
+        print(f"Testing API key (length: {len(key)})")
+        client = Groq(api_key=key)
+        
+        # Try to list models (a simple API call)
+        print("Making test API call...")
+        try:
+            models = client.models.list()
+            return {"status": "success", "message": "API key is valid", "models_available": len(models.data)}
+        except Exception as e:
+            return {"status": "error", "message": f"API key accepted but API call failed: {str(e)}"}
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to initialize client: {str(e)}"}
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("app:app", host="0.0.0.0", port=8080, reload=True) 
