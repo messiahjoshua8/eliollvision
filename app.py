@@ -11,7 +11,13 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from PIL import Image
 import numpy as np
-from groq import Groq
+# Import groq conditionally, with a more compatible approach
+try:
+    from groq import Groq
+    GROQ_IMPORT_ERROR = None
+except Exception as e:
+    GROQ_IMPORT_ERROR = str(e)
+    Groq = None
 from dotenv import load_dotenv
 
 # Try to import OpenCV, but continue if it fails
@@ -42,24 +48,24 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Initialize Groq client with environment variable
 default_client = None
-try:
-    # Check for the environment variable
-    default_api_key = os.getenv("GROQ_API_KEY")
-    if default_api_key:
-        print(f"Found API key in environment variables (length: {len(default_api_key)})")
-        
-        # Direct initialization without any optional parameters
-        from groq.client import Groq as GroqClient
-        default_client = GroqClient(api_key=default_api_key)
-        
-        # Test that the client works
-        print("Testing Groq client initialization...")
-        _ = default_client.base_url  # Just access a property to verify initialization
-        print("Groq client initialized successfully")
-    else:
-        print("No GROQ_API_KEY found in environment variables")
-except Exception as e:
-    print(f"Error initializing default Groq client: {str(e)}")
+if Groq is not None:
+    try:
+        # Check for the environment variable
+        default_api_key = os.getenv("GROQ_API_KEY")
+        if default_api_key:
+            print(f"Found API key in environment variables (length: {len(default_api_key)})")
+            # Create client with minimal parameters
+            default_client = Groq(api_key=default_api_key)
+            # Test that the client works
+            print("Testing Groq client initialization...")
+            _ = default_client.base_url  # Just access a property to verify initialization
+            print("Groq client initialized successfully")
+        else:
+            print("No GROQ_API_KEY found in environment variables")
+    except Exception as e:
+        print(f"Error initializing default Groq client: {str(e)}")
+else:
+    print(f"Groq module import failed: {GROQ_IMPORT_ERROR}")
 
 class ImageAnalysisResponse(BaseModel):
     detected_text: str
@@ -136,16 +142,18 @@ def extract_medical_supply_info(text: str) -> dict:
 
 def analyze_image_with_llm(image_data: bytes, api_key: Optional[str] = None) -> str:
     """Send image to Groq LLM for analysis."""
+    if Groq is None:
+        raise HTTPException(status_code=500, detail=f"Groq module import failed: {GROQ_IMPORT_ERROR}")
+    
     # Use custom API key if provided, otherwise use default client
     client = default_client
     if api_key:
         try:
             print(f"Using custom API key provided in request header (length: {len(api_key)})")
-            # Direct initialization without any optional parameters
-            from groq.client import Groq as GroqClient
-            client = GroqClient(api_key=api_key)
+            client = Groq(api_key=api_key)
         except Exception as e:
             print(f"Error initializing custom Groq client: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Error initializing custom Groq client: {str(e)}")
     
     if client is None:
         print("No Groq client available. Default client initialized: ", default_client is not None)
@@ -270,14 +278,13 @@ async def health_check(x_groq_api_key: Optional[str] = Header(None)):
     client_status = False
     api_key_info = None
     error_details = None
+    import_status = "available" if Groq is not None else "failed"
     
     # Check if a custom API key was provided
-    if x_groq_api_key:
+    if x_groq_api_key and Groq is not None:
         try:
             print(f"Health check with custom API key (length: {len(x_groq_api_key)})")
-            # Direct initialization without any optional parameters
-            from groq.client import Groq as GroqClient
-            test_client = GroqClient(api_key=x_groq_api_key)
+            test_client = Groq(api_key=x_groq_api_key)
             
             # Just try to access a property to verify it's initialized properly
             _ = test_client.base_url
@@ -290,7 +297,9 @@ async def health_check(x_groq_api_key: Optional[str] = Header(None)):
         # Check the default client
         client_status = default_client is not None
         api_key_info = "default" if default_client else "none"
-        if not default_client:
+        if Groq is None:
+            error_details = f"Groq module import error: {GROQ_IMPORT_ERROR}"
+        elif not default_client:
             error_details = "Default Groq client not initialized"
     
     # Check environment variables (without revealing the actual keys)
@@ -304,6 +313,7 @@ async def health_check(x_groq_api_key: Optional[str] = Header(None)):
         "api_key_source": api_key_info,
         "environment_vars": env_vars,
         "error": error_details,
+        "groq_import": import_status,
         "opencv_available": CV2_AVAILABLE
     }
 
