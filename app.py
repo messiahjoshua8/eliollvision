@@ -15,11 +15,43 @@ import numpy as np
 try:
     from groq import Groq
     GROQ_IMPORT_ERROR = None
+    
+    # Apply preemptive monkey patch to Groq.__init__ to handle proxies parameter
+    # This ensures it's patched before any client initialization
+    original_init = Groq.__init__
+    
+    def patched_init(self, *args, **kwargs):
+        # Always remove proxies parameter if it exists
+        if 'proxies' in kwargs:
+            print("Preemptively removing 'proxies' parameter")
+            del kwargs['proxies']
+        return original_init(self, *args, **kwargs)
+    
+    # Apply the monkey patch
+    Groq.__init__ = patched_init
+    print("Applied preemptive monkey patch to Groq.__init__")
+    
 except Exception as e:
     GROQ_IMPORT_ERROR = str(e)
     Groq = None
 from dotenv import load_dotenv
 import requests  # Add this import at the top
+
+# Define the create_groq_client function before it's used
+def create_groq_client(api_key):
+    """Create a Groq client while handling version differences."""
+    if Groq is None:
+        raise ValueError(f"Groq module import failed: {GROQ_IMPORT_ERROR}")
+        
+    try:
+        # Create the client
+        client = Groq(api_key=api_key)
+        # Test that it works by accessing a property
+        _ = client.base_url
+        return client
+    except Exception as e:
+        print(f"Error creating Groq client: {str(e)}")
+        raise
 
 # Try to import OpenCV, but continue if it fails
 try:
@@ -379,34 +411,6 @@ async def direct_test(key: Optional[str] = None):
             }
     except Exception as e:
         return {"status": "error", "message": f"Error: {str(e)}"}
-
-# Add a custom wrapper for Groq client initialization to handle the proxies issue
-def create_groq_client(api_key):
-    """Create a Groq client while handling version differences."""
-    try:
-        # Try direct initialization first
-        return Groq(api_key=api_key)
-    except TypeError as e:
-        error_msg = str(e)
-        if "unexpected keyword argument 'proxies'" in error_msg:
-            print("Detected 'proxies' parameter issue, using monkey patch")
-            # Monkey patch the Groq class to handle the issue
-            original_init = Groq.__init__
-            
-            def patched_init(self, *args, **kwargs):
-                # Remove problematic parameters
-                if 'proxies' in kwargs:
-                    del kwargs['proxies']
-                return original_init(self, *args, **kwargs)
-            
-            # Apply the monkey patch
-            Groq.__init__ = patched_init
-            
-            # Try again with the patched init
-            return Groq(api_key=api_key)
-        else:
-            # If it's a different TypeError, re-raise it
-            raise
 
 if __name__ == "__main__":
     import uvicorn
