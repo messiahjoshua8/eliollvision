@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medical Supply Vision Analyzer</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f7fa;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        header {
+            background-color: #2c3e50;
+            color: white;
+            text-align: center;
+            padding: 1rem;
+            margin-bottom: 2rem;
+        }
+        h1 {
+            margin: 0;
+            font-size: 1.8rem;
+        }
+        .main-content {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        @media (min-width: 768px) {
+            .main-content {
+                flex-direction: row;
+            }
+        }
+        .camera-container {
+            flex: 1;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            position: relative;
+        }
+        .results-container {
+            flex: 1;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            overflow-y: auto;
+            max-height: 600px;
+        }
+        #video {
+            width: 100%;
+            max-height: 400px;
+            background-color: #000;
+            border-radius: 4px;
+        }
+        #canvas {
+            display: none;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        button:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+        }
+        #captureBtn {
+            background-color: #e74c3c;
+        }
+        #captureBtn:hover {
+            background-color: #c0392b;
+        }
+        .result-item {
+            border-left: 3px solid #3498db;
+            padding: 10px;
+            margin-bottom: 15px;
+            background-color: #f8f9fa;
+            border-radius: 0 4px 4px 0;
+        }
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            color: #7f8c8d;
+            font-size: 0.8rem;
+            margin-bottom: 5px;
+        }
+        .result-content {
+            margin-top: 10px;
+        }
+        .result-data {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            row-gap: 8px;
+            column-gap: 15px;
+            margin-top: 15px;
+        }
+        .data-label {
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 1.5rem;
+            display: none;
+        }
+        .loading-spinner {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        #status {
+            margin-top: 10px;
+            color: #7f8c8d;
+            font-size: 0.9rem;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Medical Supply Vision Analyzer</h1>
+    </header>
+    
+    <div class="container">
+        <div class="main-content">
+            <div class="camera-container">
+                <video id="video" autoplay playsinline></video>
+                <canvas id="canvas"></canvas>
+                <div class="controls">
+                    <button id="startBtn">Start Camera</button>
+                    <button id="captureBtn" disabled>Capture & Save</button>
+                    <button id="analyzeBtn" disabled>Analyze Frame</button>
+                </div>
+                <div id="status"></div>
+                <div id="processingOverlay" class="overlay">
+                    <div class="loading-spinner"></div>
+                    <span>Processing...</span>
+                </div>
+            </div>
+            
+            <div class="results-container">
+                <h2>Analysis Results</h2>
+                <div id="liveResults" class="hidden">
+                    <div class="result-item">
+                        <div class="result-header">
+                            <span>Live Analysis</span>
+                            <span id="liveTimestamp"></span>
+                        </div>
+                        <div class="result-content">
+                            <div id="liveText" class="result-text"></div>
+                            <div class="result-data">
+                                <span class="data-label">Implant Type:</span>
+                                <span id="liveImplantType">-</span>
+                                
+                                <span class="data-label">GTIN:</span>
+                                <span id="liveGTIN">-</span>
+                                
+                                <span class="data-label">LOT:</span>
+                                <span id="liveLOT">-</span>
+                                
+                                <span class="data-label">Expiration:</span>
+                                <span id="liveExpiration">-</span>
+                                
+                                <span class="data-label">Sterile:</span>
+                                <span id="liveSterile">-</span>
+                                
+                                <span class="data-label">Size:</span>
+                                <span id="liveSize">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="savedResults"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM elements
+        const videoElement = document.getElementById('video');
+        const canvasElement = document.getElementById('canvas');
+        const startBtn = document.getElementById('startBtn');
+        const captureBtn = document.getElementById('captureBtn');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const statusElement = document.getElementById('status');
+        const processingOverlay = document.getElementById('processingOverlay');
+        const liveResults = document.getElementById('liveResults');
+        const savedResults = document.getElementById('savedResults');
+        
+        // Configuration
+        const API_URL = '/analyze/frame';
+        const ANALYSIS_INTERVAL = 3000; // Analyze every 3 seconds
+        let stream = null;
+        let isProcessing = false;
+        let analysisTimer = null;
+        
+        // Start camera stream
+        startBtn.addEventListener('click', async () => {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment' },
+                    audio: false
+                });
+                videoElement.srcObject = stream;
+                startBtn.disabled = true;
+                captureBtn.disabled = false;
+                analyzeBtn.disabled = false;
+                
+                // Start periodic analysis
+                startPeriodicAnalysis();
+                
+                statusElement.textContent = "Camera active. Analyzing frames every " + 
+                    (ANALYSIS_INTERVAL / 1000) + " seconds.";
+            } catch (err) {
+                console.error('Error accessing camera:', err);
+                statusElement.textContent = `Camera error: ${err.message}`;
+            }
+        });
+        
+        // Start periodic analysis
+        function startPeriodicAnalysis() {
+            analysisTimer = setInterval(() => {
+                if (!isProcessing) {
+                    analyzeCurrentFrame(false);
+                }
+            }, ANALYSIS_INTERVAL);
+        }
+        
+        // Capture and save button
+        captureBtn.addEventListener('click', () => {
+            analyzeCurrentFrame(true);
+        });
+        
+        // Manual analyze button
+        analyzeBtn.addEventListener('click', () => {
+            analyzeCurrentFrame(false);
+        });
+        
+        // Analyze current frame
+        async function analyzeCurrentFrame(saveImage) {
+            if (isProcessing) return;
+            
+            isProcessing = true;
+            if (saveImage) {
+                processingOverlay.style.display = 'flex';
+            }
+            
+            const context = canvasElement.getContext('2d');
+            canvasElement.width = videoElement.videoWidth;
+            canvasElement.height = videoElement.videoHeight;
+            context.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
+            
+            // Convert canvas to blob
+            const blob = await new Promise(resolve => {
+                canvasElement.toBlob(resolve, 'image/jpeg', 0.8);
+            });
+            
+            // Create form data
+            const formData = new FormData();
+            formData.append('image', blob, 'frame.jpg');
+            formData.append('save_image', saveImage);
+            
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error ${response.status}`);
+                }
+                
+                const result = await response.json();
+                displayResults(result, saveImage);
+                
+                if (saveImage) {
+                    statusElement.textContent = `Image captured and saved with ID: ${result.image_id}`;
+                } else {
+                    statusElement.textContent = `Frame analyzed at ${new Date().toLocaleTimeString()}`;
+                }
+            } catch (error) {
+                console.error('Analysis error:', error);
+                statusElement.textContent = `Analysis failed: ${error.message}`;
+            } finally {
+                isProcessing = false;
+                processingOverlay.style.display = 'none';
+            }
+        }
+        
+        // Display results
+        function displayResults(result, isSaved) {
+            // Format date
+            const timestamp = new Date(result.timestamp).toLocaleString();
+            
+            if (isSaved) {
+                // Create new result item for saved analysis
+                const resultItem = document.createElement('div');
+                resultItem.className = 'result-item';
+                resultItem.innerHTML = `
+                    <div class="result-header">
+                        <span>Saved Analysis #${result.image_id}</span>
+                        <span>${timestamp}</span>
+                    </div>
+                    <div class="result-content">
+                        <div class="result-text">${result.detected_text}</div>
+                        <div class="result-data">
+                            <span class="data-label">Implant Type:</span>
+                            <span>${result.implant_type || '-'}</span>
+                            
+                            <span class="data-label">GTIN:</span>
+                            <span>${result.gtin || '-'}</span>
+                            
+                            <span class="data-label">LOT:</span>
+                            <span>${result.lot || '-'}</span>
+                            
+                            <span class="data-label">Expiration:</span>
+                            <span>${result.expiration_date || '-'}</span>
+                            
+                            <span class="data-label">Sterile:</span>
+                            <span>${result.sterile || '-'}</span>
+                            
+                            <span class="data-label">Size:</span>
+                            <span>${result.size || '-'}</span>
+                        </div>
+                    </div>
+                `;
+                savedResults.prepend(resultItem);
+            } else {
+                // Update live result
+                liveResults.classList.remove('hidden');
+                document.getElementById('liveTimestamp').textContent = timestamp;
+                document.getElementById('liveText').textContent = result.detected_text;
+                document.getElementById('liveImplantType').textContent = result.implant_type || '-';
+                document.getElementById('liveGTIN').textContent = result.gtin || '-';
+                document.getElementById('liveLOT').textContent = result.lot || '-';
+                document.getElementById('liveExpiration').textContent = result.expiration_date || '-';
+                document.getElementById('liveSterile').textContent = result.sterile || '-';
+                document.getElementById('liveSize').textContent = result.size || '-';
+            }
+        }
+        
+        // Clean up resources when page is closed
+        window.addEventListener('beforeunload', () => {
+            if (analysisTimer) {
+                clearInterval(analysisTimer);
+            }
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+        });
+    </script>
+</body>
+</html> 

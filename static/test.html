@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Groq Vision API Tester</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f7fa;
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+        }
+        h1 {
+            color: #2c3e50;
+            margin-top: 0;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        input[type="text"], input[type="password"], textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        textarea {
+            height: 100px;
+            resize: vertical;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .image-preview {
+            margin-top: 20px;
+            text-align: center;
+        }
+        #preview {
+            max-width: 100%;
+            max-height: 400px;
+            border-radius: 4px;
+            display: none;
+        }
+        .response-container {
+            margin-top: 20px;
+            border-left: 3px solid #3498db;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 0 4px 4px 0;
+        }
+        .loading {
+            text-align: center;
+            margin: 20px 0;
+            display: none;
+        }
+        .loading-spinner {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .result-data {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            row-gap: 8px;
+            column-gap: 15px;
+            margin-top: 15px;
+        }
+        .data-label {
+            font-weight: bold;
+        }
+        .status {
+            font-size: 0.9rem;
+            color: #7f8c8d;
+            margin-top: 10px;
+        }
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #ddd;
+        }
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            border-bottom: none;
+            border-radius: 4px 4px 0 0;
+            margin-right: 5px;
+        }
+        .tab.active {
+            background-color: #f8f9fa;
+            border-color: #ddd;
+            border-bottom-color: #f8f9fa;
+            margin-bottom: -1px;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .subtitle {
+            color: #7f8c8d;
+            margin-top: -10px;
+            margin-bottom: 20px;
+        }
+        .success {
+            color: #27ae60;
+        }
+        .error {
+            color: #e74c3c;
+        }
+        #apiKeyStatus {
+            padding: 5px 10px;
+            border-radius: 4px;
+            display: inline-block;
+            font-weight: bold;
+        }
+        .interval-control {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 20px;
+            border-top: 1px solid #ddd;
+            padding-top: 20px;
+        }
+        .interval-select {
+            width: 150px;
+            padding: 5px;
+            border-radius: 4px;
+            margin-left: 10px;
+        }
+        .stop-button {
+            background-color: #e74c3c;
+        }
+        .stop-button:hover {
+            background-color: #c0392b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Groq Vision API Tester</h1>
+        <p class="subtitle">Test your Groq API integration with simple image uploads</p>
+
+        <div class="tabs">
+            <div class="tab active" data-target="image-tab">Image Analysis</div>
+            <div class="tab" data-target="api-tab">API Settings</div>
+        </div>
+
+        <div class="tab-content active" id="image-tab">
+            <div class="form-group">
+                <label for="fileInput">Upload Image:</label>
+                <input type="file" id="fileInput" accept="image/*" />
+            </div>
+
+            <div class="form-group">
+                <label for="instruction">Instruction:</label>
+                <textarea id="instruction">What medical supply is shown in this image? Extract all visible information including: Implant Type, GTIN, LOT number, Expiration Date, Sterility status, and Size. Format the output clearly with one piece of information per line.</textarea>
+            </div>
+
+            <button id="analyzeBtn">Analyze Image</button>
+
+            <div class="loading" id="loading">
+                <div class="loading-spinner"></div>
+                <p>Processing... This may take a few seconds.</p>
+            </div>
+
+            <div class="image-preview">
+                <img id="preview" src="" alt="Preview" />
+            </div>
+
+            <div class="response-container" id="responseContainer" style="display:none;">
+                <h3>Response:</h3>
+                <pre id="rawResponse" style="white-space: pre-wrap;"></pre>
+                
+                <div class="result-data">
+                    <span class="data-label">Implant Type:</span>
+                    <span id="implantType">-</span>
+                    
+                    <span class="data-label">GTIN:</span>
+                    <span id="gtin">-</span>
+                    
+                    <span class="data-label">LOT:</span>
+                    <span id="lot">-</span>
+                    
+                    <span class="data-label">Expiration:</span>
+                    <span id="expiration">-</span>
+                    
+                    <span class="data-label">Sterile:</span>
+                    <span id="sterile">-</span>
+                    
+                    <span class="data-label">Size:</span>
+                    <span id="size">-</span>
+                </div>
+            </div>
+
+            <div class="interval-control">
+                <div>
+                    <label for="intervalSelect">Interval between requests:</label>
+                    <select id="intervalSelect" class="interval-select">
+                        <option value="500">500ms</option>
+                        <option value="1000">1000ms</option>
+                        <option value="2000">2000ms</option>
+                        <option value="3000" selected>3000ms</option>
+                        <option value="5000">5000ms</option>
+                    </select>
+                </div>
+                <button id="autoAnalyzeBtn">Start Auto-Analyze</button>
+                <button id="stopAutoAnalyzeBtn" class="stop-button" disabled>Stop</button>
+            </div>
+        </div>
+
+        <div class="tab-content" id="api-tab">
+            <div class="form-group">
+                <label for="baseApi">API Base URL:</label>
+                <input type="text" id="baseApi" value="http://localhost:8080" />
+            </div>
+
+            <div class="form-group">
+                <label for="apiKey">GROQ API Key (optional, used for direct testing):</label>
+                <input type="password" id="apiKey" placeholder="Enter your Groq API key" />
+                <p class="status">If provided, this will be sent directly to the API for testing.</p>
+            </div>
+
+            <button id="testApiBtn">Test API Connection</button>
+            <div class="status" id="apiKeyStatus"></div>
+        </div>
+
+        <div class="status" id="status"></div>
+    </div>
+
+    <script>
+        // DOM elements
+        const fileInput = document.getElementById('fileInput');
+        const preview = document.getElementById('preview');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const baseApiInput = document.getElementById('baseApi');
+        const apiKeyInput = document.getElementById('apiKey');
+        const instructionInput = document.getElementById('instruction');
+        const responseContainer = document.getElementById('responseContainer');
+        const rawResponse = document.getElementById('rawResponse');
+        const loading = document.getElementById('loading');
+        const statusEl = document.getElementById('status');
+        const apiKeyStatus = document.getElementById('apiKeyStatus');
+        const tabs = document.querySelectorAll('.tab');
+        const tabContents = document.querySelectorAll('.tab-content');
+        const testApiBtn = document.getElementById('testApiBtn');
+        const autoAnalyzeBtn = document.getElementById('autoAnalyzeBtn');
+        const stopAutoAnalyzeBtn = document.getElementById('stopAutoAnalyzeBtn');
+        const intervalSelect = document.getElementById('intervalSelect');
+        
+        // Auto-analyze variables
+        let autoAnalyzeInterval = null;
+        
+        // Tab switching
+        tabs.forEach(tab => {
+            tab.addEventListener('click', function() {
+                // Remove active class from all tabs and contents
+                tabs.forEach(t => t.classList.remove('active'));
+                tabContents.forEach(c => c.classList.remove('active'));
+                
+                // Add active class to clicked tab
+                this.classList.add('active');
+                
+                // Show corresponding content
+                const targetId = this.getAttribute('data-target');
+                document.getElementById(targetId).classList.add('active');
+            });
+        });
+        
+        // Show image preview when a file is selected
+        fileInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    preview.src = event.target.result;
+                    preview.style.display = 'block';
+                }
+                reader.readAsDataURL(file);
+            }
+        });
+        
+        // Test API connection
+        testApiBtn.addEventListener('click', async function() {
+            const baseApi = baseApiInput.value.trim();
+            const apiKey = apiKeyInput.value.trim();
+            
+            if (!baseApi) {
+                apiKeyStatus.textContent = 'Please enter a valid API URL';
+                apiKeyStatus.className = 'error';
+                return;
+            }
+            
+            apiKeyStatus.textContent = 'Testing connection...';
+            apiKeyStatus.className = '';
+            
+            try {
+                // Add the API key as a header if provided
+                const headers = {};
+                if (apiKey) {
+                    headers['X-Groq-API-Key'] = apiKey;
+                }
+                
+                const response = await fetch(`${baseApi}/health`, {
+                    headers: headers
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error ${response.status}`);
+                }
+                
+                const result = await response.json();
+                
+                if (result.status === 'ok') {
+                    if (result.groq_client) {
+                        apiKeyStatus.textContent = 'Connection successful! Groq client is initialized.';
+                        apiKeyStatus.className = 'success';
+                    } else {
+                        apiKeyStatus.textContent = 'API is running but Groq client is not initialized. Check your API key.';
+                        apiKeyStatus.className = 'error';
+                    }
+                } else {
+                    apiKeyStatus.textContent = 'API responded but status is not ok.';
+                    apiKeyStatus.className = 'error';
+                }
+            } catch (error) {
+                console.error('Error testing API:', error);
+                apiKeyStatus.textContent = `Error: ${error.message}`;
+                apiKeyStatus.className = 'error';
+            }
+        });
+        
+        // Start auto-analyze
+        autoAnalyzeBtn.addEventListener('click', function() {
+            const interval = parseInt(intervalSelect.value);
+            
+            if (autoAnalyzeInterval) {
+                clearInterval(autoAnalyzeInterval);
+            }
+            
+            autoAnalyzeInterval = setInterval(() => {
+                if (!isProcessing && fileInput.files.length > 0) {
+                    analyzeCurrentFrame(false);
+                }
+            }, interval);
+            
+            autoAnalyzeBtn.disabled = true;
+            stopAutoAnalyzeBtn.disabled = false;
+            statusEl.textContent = `Auto-analyze started with ${interval}ms interval`;
+        });
+        
+        // Stop auto-analyze
+        stopAutoAnalyzeBtn.addEventListener('click', function() {
+            if (autoAnalyzeInterval) {
+                clearInterval(autoAnalyzeInterval);
+                autoAnalyzeInterval = null;
+                
+                autoAnalyzeBtn.disabled = false;
+                stopAutoAnalyzeBtn.disabled = true;
+                statusEl.textContent = 'Auto-analyze stopped';
+            }
+        });
+        
+        // Analyze button click handler
+        analyzeBtn.addEventListener('click', function() {
+            analyzeCurrentFrame(false);
+        });
+        
+        // Variable to track if processing is happening
+        let isProcessing = false;
+        
+        // Analyze current frame
+        async function analyzeCurrentFrame(saveImage) {
+            const file = fileInput.files[0];
+            if (!file) {
+                statusEl.textContent = 'Please select an image file';
+                return;
+            }
+            
+            const baseApi = baseApiInput.value.trim();
+            if (!baseApi) {
+                statusEl.textContent = 'Please enter a valid API URL';
+                return;
+            }
+            
+            // Don't start new analysis if one is in progress
+            if (isProcessing) return;
+            
+            isProcessing = true;
+            
+            // Show loading indicator
+            loading.style.display = 'block';
+            statusEl.textContent = 'Sending request...';
+            
+            // Prepare form data
+            const formData = new FormData();
+            formData.append('image', file);
+            formData.append('save_image', saveImage ? 'true' : 'false');
+            
+            // Add the instruction as a custom header
+            const instruction = instructionInput.value.trim();
+            
+            // Add API key header if provided
+            const headers = {};
+            const apiKey = apiKeyInput.value.trim();
+            if (apiKey) {
+                headers['X-Groq-API-Key'] = apiKey;
+            }
+            
+            try {
+                // Send request
+                const response = await fetch(`${baseApi}/analyze/frame`, {
+                    method: 'POST',
+                    headers: headers,
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error ${response.status}`);
+                }
+                
+                const result = await response.json();
+                
+                // Display raw response
+                rawResponse.textContent = result.detected_text || 'No text detected';
+                
+                // Update structured data
+                document.getElementById('implantType').textContent = result.implant_type || '-';
+                document.getElementById('gtin').textContent = result.gtin || '-';
+                document.getElementById('lot').textContent = result.lot || '-';
+                document.getElementById('expiration').textContent = result.expiration_date || '-';
+                document.getElementById('sterile').textContent = result.sterile || '-';
+                document.getElementById('size').textContent = result.size || '-';
+                
+                // Show response container
+                responseContainer.style.display = 'block';
+                statusEl.textContent = `Analysis completed at ${new Date().toLocaleTimeString()}. Image ID: ${result.image_id}`;
+            } catch (error) {
+                console.error('Error analyzing image:', error);
+                statusEl.textContent = `Error: ${error.message}`;
+                responseContainer.style.display = 'none';
+            } finally {
+                // Hide loading indicator
+                loading.style.display = 'none';
+                isProcessing = false;
+            }
+        }
+    </script>
+</body>
+</html> 

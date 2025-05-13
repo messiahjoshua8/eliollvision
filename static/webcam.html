@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medical Supply Webcam Analyzer</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f7fa;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+        }
+        h1 {
+            color: #2c3e50;
+            margin-top: 0;
+            text-align: center;
+        }
+        .subtitle {
+            color: #7f8c8d;
+            margin-top: -10px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .main-content {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        @media (min-width: 768px) {
+            .main-content {
+                flex-direction: row;
+            }
+        }
+        .camera-container {
+            flex: 1;
+            position: relative;
+        }
+        .results-container {
+            flex: 1;
+        }
+        #video {
+            width: 100%;
+            max-height: 400px;
+            background-color: #000;
+            border-radius: 4px;
+        }
+        #canvas {
+            display: none;
+        }
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        .control-group {
+            display: flex;
+            gap: 10px;
+            margin: 10px 0;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        button:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+        }
+        .capture-btn {
+            background-color: #e74c3c;
+        }
+        .capture-btn:hover {
+            background-color: #c0392b;
+        }
+        .stop-btn {
+            background-color: #e74c3c;
+        }
+        .stop-btn:hover {
+            background-color: #c0392b;
+        }
+        .result-item {
+            border-left: 3px solid #3498db;
+            padding: 15px;
+            margin-bottom: 15px;
+            background-color: #f8f9fa;
+            border-radius: 0 4px 4px 0;
+        }
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            color: #7f8c8d;
+            font-size: 0.8rem;
+            margin-bottom: 5px;
+        }
+        .result-content {
+            margin-top: 10px;
+        }
+        .result-data {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            row-gap: 8px;
+            column-gap: 15px;
+            margin-top: 15px;
+        }
+        .data-label {
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 1.2rem;
+            display: none;
+        }
+        .loading-spinner {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 15px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .status {
+            margin-top: 10px;
+            color: #7f8c8d;
+            font-size: 0.9rem;
+        }
+        .settings-container {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        input[type="text"], input[type="password"], select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .success {
+            color: #27ae60;
+        }
+        .error {
+            color: #e74c3c;
+        }
+        #apiKeyStatus {
+            padding: 5px 10px;
+            border-radius: 4px;
+            display: inline-block;
+            font-weight: bold;
+        }
+        .tab-list {
+            display: flex;
+            border-bottom: 1px solid #ddd;
+            margin-bottom: 20px;
+        }
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            border-bottom: none;
+            border-radius: 4px 4px 0 0;
+            margin-right: 5px;
+        }
+        .tab.active {
+            background-color: #f8f9fa;
+            border-color: #ddd;
+            border-bottom-color: #f8f9fa;
+            margin-bottom: -1px;
+        }
+        .live-indicator {
+            display: flex;
+            align-items: center;
+            margin-top: 10px;
+        }
+        .indicator-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: #e74c3c;
+            margin-right: 8px;
+            animation: pulse 1.5s infinite;
+        }
+        .indicator-dot.active {
+            background-color: #27ae60;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        .api-settings {
+            margin-top: 20px;
+            margin-bottom: 20px;
+        }
+        .saved-items {
+            max-height: 500px;
+            overflow-y: auto;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Medical Supply Webcam Analyzer</h1>
+        <p class="subtitle">Real-time medical supply detection and inventory analysis</p>
+        
+        <div class="settings-container">
+            <div class="tab-list">
+                <div class="tab active" data-target="camera-settings">Camera Settings</div>
+                <div class="tab" data-target="api-settings">API Settings</div>
+            </div>
+            
+            <div class="tab-content" id="camera-settings">
+                <div class="form-group">
+                    <label for="intervalSelect">Analysis Interval:</label>
+                    <select id="intervalSelect">
+                        <option value="500">500ms (Fast)</option>
+                        <option value="1000">1000ms (Medium)</option>
+                        <option value="2000">2000ms (Slow)</option>
+                        <option value="3000" selected>3000ms (Default)</option>
+                        <option value="5000">5000ms (Very Slow)</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="cameraSelect">Camera:</label>
+                    <select id="cameraSelect">
+                        <option value="environment" selected>Rear Camera (if available)</option>
+                        <option value="user">Front Camera</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="tab-content hidden" id="api-settings">
+                <div class="form-group">
+                    <label for="apiUrl">API Base URL:</label>
+                    <input type="text" id="apiUrl" value="http://localhost:8080" />
+                </div>
+                
+                <div class="form-group">
+                    <label for="apiKey">GROQ API Key (optional):</label>
+                    <input type="password" id="apiKey" placeholder="Enter your Groq API key" />
+                </div>
+                
+                <button id="testApiBtn">Test API Connection</button>
+                <div id="apiKeyStatus"></div>
+            </div>
+        </div>
+        
+        <div class="main-content">
+            <div class="camera-container">
+                <video id="video" autoplay playsinline></video>
+                <canvas id="canvas"></canvas>
+                
+                <div class="overlay" id="processingOverlay">
+                    <div class="loading-spinner"></div>
+                    <span>Processing...</span>
+                </div>
+                
+                <div class="controls">
+                    <div class="control-group">
+                        <button id="startBtn">Start Camera</button>
+                        <button id="stopBtn" disabled>Stop Camera</button>
+                    </div>
+                    
+                    <div class="control-group">
+                        <button id="startAnalysisBtn" disabled>Start Analysis</button>
+                        <button id="stopAnalysisBtn" disabled>Stop Analysis</button>
+                        <button id="captureBtn" class="capture-btn" disabled>Capture & Save</button>
+                    </div>
+                </div>
+                
+                <div class="live-indicator">
+                    <div class="indicator-dot" id="liveIndicator"></div>
+                    <span id="analysisStatus">Camera inactive</span>
+                </div>
+                
+                <div class="status" id="status"></div>
+            </div>
+            
+            <div class="results-container">
+                <h2>Analysis Results</h2>
+                
+                <div class="result-item">
+                    <div class="result-header">
+                        <span>Live Analysis</span>
+                        <span id="liveTimestamp"></span>
+                    </div>
+                    <div class="result-content">
+                        <div id="liveText" class="result-text"></div>
+                        <div class="result-data">
+                            <span class="data-label">Implant Type:</span>
+                            <span id="liveImplantType">-</span>
+                            
+                            <span class="data-label">GTIN:</span>
+                            <span id="liveGTIN">-</span>
+                            
+                            <span class="data-label">LOT:</span>
+                            <span id="liveLOT">-</span>
+                            
+                            <span class="data-label">Expiration:</span>
+                            <span id="liveExpiration">-</span>
+                            
+                            <span class="data-label">Sterile:</span>
+                            <span id="liveSterile">-</span>
+                            
+                            <span class="data-label">Size:</span>
+                            <span id="liveSize">-</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <h3>Saved Items</h3>
+                <div id="savedResults" class="saved-items"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // DOM Elements
+        const videoElement = document.getElementById('video');
+        const canvasElement = document.getElementById('canvas');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const startAnalysisBtn = document.getElementById('startAnalysisBtn');
+        const stopAnalysisBtn = document.getElementById('stopAnalysisBtn');
+        const captureBtn = document.getElementById('captureBtn');
+        const processingOverlay = document.getElementById('processingOverlay');
+        const statusElement = document.getElementById('status');
+        const analysisStatusElement = document.getElementById('analysisStatus');
+        const liveIndicator = document.getElementById('liveIndicator');
+        const intervalSelect = document.getElementById('intervalSelect');
+        const cameraSelect = document.getElementById('cameraSelect');
+        const apiUrlInput = document.getElementById('apiUrl');
+        const apiKeyInput = document.getElementById('apiKey');
+        const apiKeyStatus = document.getElementById('apiKeyStatus');
+        const testApiBtn = document.getElementById('testApiBtn');
+        const savedResults = document.getElementById('savedResults');
+        const tabs = document.querySelectorAll('.tab');
+        const tabContents = document.querySelectorAll('.tab-content');
+        
+        // Live Analysis Result Elements
+        const liveTimestamp = document.getElementById('liveTimestamp');
+        const liveText = document.getElementById('liveText');
+        const liveImplantType = document.getElementById('liveImplantType');
+        const liveGTIN = document.getElementById('liveGTIN');
+        const liveLOT = document.getElementById('liveLOT');
+        const liveExpiration = document.getElementById('liveExpiration');
+        const liveSterile = document.getElementById('liveSterile');
+        const liveSize = document.getElementById('liveSize');
+        
+        // Variables
+        let stream = null;
+        let intervalId = null;
+        let isProcessing = false;
+        let isAnalyzing = false;
+        
+        // Tab switching
+        tabs.forEach(tab => {
+            tab.addEventListener('click', function() {
+                tabs.forEach(t => t.classList.remove('active'));
+                tabContents.forEach(c => c.classList.add('hidden'));
+                
+                this.classList.add('active');
+                const targetId = this.getAttribute('data-target');
+                document.getElementById(targetId).classList.remove('hidden');
+            });
+        });
+        
+        // Test API Connection
+        testApiBtn.addEventListener('click', async () => {
+            const baseUrl = apiUrlInput.value.trim();
+            const apiKey = apiKeyInput.value.trim();
+            
+            if (!baseUrl) {
+                apiKeyStatus.textContent = 'Please enter a valid API URL';
+                apiKeyStatus.className = 'error';
+                return;
+            }
+            
+            apiKeyStatus.textContent = 'Testing connection...';
+            apiKeyStatus.className = '';
+            
+            try {
+                // Add API key as header if provided
+                const headers = {};
+                if (apiKey) {
+                    headers['X-Groq-API-Key'] = apiKey;
+                }
+                
+                const response = await fetch(`${baseUrl}/health`, {
+                    headers
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error ${response.status}`);
+                }
+                
+                const result = await response.json();
+                
+                if (result.status === 'ok') {
+                    if (result.groq_client) {
+                        apiKeyStatus.textContent = 'Connection successful! Groq client is initialized.';
+                        apiKeyStatus.className = 'success';
+                    } else {
+                        apiKeyStatus.textContent = 'API is running but Groq client is not initialized. Check your API key.';
+                        apiKeyStatus.className = 'error';
+                    }
+                } else {
+                    apiKeyStatus.textContent = 'API responded but status is not ok.';
+                    apiKeyStatus.className = 'error';
+                }
+            } catch (error) {
+                console.error('Error testing API:', error);
+                apiKeyStatus.textContent = `Error: ${error.message}`;
+                apiKeyStatus.className = 'error';
+            }
+        });
+        
+        // Start Camera
+        startBtn.addEventListener('click', async () => {
+            try {
+                const facingMode = cameraSelect.value;
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode },
+                    audio: false
+                });
+                
+                videoElement.srcObject = stream;
+                
+                // Update UI
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                startAnalysisBtn.disabled = false;
+                captureBtn.disabled = false;
+                
+                analysisStatusElement.textContent = 'Camera active. Ready for analysis.';
+                statusElement.textContent = 'Camera started successfully.';
+            } catch (error) {
+                console.error('Error starting camera:', error);
+                statusElement.textContent = `Camera error: ${error.message}`;
+            }
+        });
+        
+        // Stop Camera
+        stopBtn.addEventListener('click', () => {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                videoElement.srcObject = null;
+                stream = null;
+                
+                // Stop analysis if running
+                if (isAnalyzing) {
+                    stopAnalysis();
+                }
+                
+                // Update UI
+                startBtn.disabled = false;
+                stopBtn.disabled = true;
+                startAnalysisBtn.disabled = true;
+                stopAnalysisBtn.disabled = true;
+                captureBtn.disabled = true;
+                
+                analysisStatusElement.textContent = 'Camera inactive';
+                statusElement.textContent = 'Camera stopped.';
+                liveIndicator.classList.remove('active');
+            }
+        });
+        
+        // Start Analysis
+        startAnalysisBtn.addEventListener('click', () => {
+            if (!stream) return;
+            
+            const interval = parseInt(intervalSelect.value);
+            isAnalyzing = true;
+            
+            // Start periodic analysis
+            intervalId = setInterval(() => {
+                if (!isProcessing) {
+                    analyzeCurrentFrame(false);
+                }
+            }, interval);
+            
+            // Update UI
+            startAnalysisBtn.disabled = true;
+            stopAnalysisBtn.disabled = false;
+            liveIndicator.classList.add('active');
+            
+            analysisStatusElement.textContent = `Live analysis active (${interval}ms)`;
+            statusElement.textContent = `Analysis started with ${interval}ms interval.`;
+        });
+        
+        // Stop Analysis
+        stopAnalysisBtn.addEventListener('click', () => {
+            stopAnalysis();
+        });
+        
+        function stopAnalysis() {
+            if (intervalId) {
+                clearInterval(intervalId);
+                intervalId = null;
+                isAnalyzing = false;
+                
+                // Update UI
+                startAnalysisBtn.disabled = false;
+                stopAnalysisBtn.disabled = true;
+                liveIndicator.classList.remove('active');
+                
+                analysisStatusElement.textContent = 'Camera active. Analysis paused.';
+                statusElement.textContent = 'Analysis stopped.';
+            }
+        }
+        
+        // Capture and Save
+        captureBtn.addEventListener('click', () => {
+            if (!stream) return;
+            analyzeCurrentFrame(true);
+        });
+        
+        // Analyze Current Frame
+        async function analyzeCurrentFrame(saveImage) {
+            if (isProcessing) return;
+            
+            isProcessing = true;
+            
+            // Show processing overlay for captures
+            if (saveImage) {
+                processingOverlay.style.display = 'flex';
+            }
+            
+            try {
+                // Capture frame from video
+                const context = canvasElement.getContext('2d');
+                canvasElement.width = videoElement.videoWidth;
+                canvasElement.height = videoElement.videoHeight;
+                context.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
+                
+                // Convert to blob
+                const blob = await new Promise(resolve => {
+                    canvasElement.toBlob(resolve, 'image/jpeg', 0.9);
+                });
+                
+                // Get API URL and key
+                const apiUrl = apiUrlInput.value.trim();
+                const apiKey = apiKeyInput.value.trim();
+                
+                // Create form data
+                const formData = new FormData();
+                formData.append('image', blob, 'frame.jpg');
+                formData.append('save_image', saveImage ? 'true' : 'false');
+                
+                // Set headers if API key is provided
+                const headers = {};
+                if (apiKey) {
+                    headers['X-Groq-API-Key'] = apiKey;
+                }
+                
+                // Send to API
+                const response = await fetch(`${apiUrl}/analyze/frame`, {
+                    method: 'POST',
+                    headers: headers,
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error ${response.status}`);
+                }
+                
+                const result = await response.json();
+                
+                // Update the live view
+                updateLiveResults(result);
+                
+                // If saving, add to saved items
+                if (saveImage) {
+                    addSavedResult(result);
+                    statusElement.textContent = `Image captured and saved with ID: ${result.image_id}`;
+                } else {
+                    statusElement.textContent = `Frame analyzed at ${new Date().toLocaleTimeString()}`;
+                }
+            } catch (error) {
+                console.error('Analysis error:', error);
+                statusElement.textContent = `Analysis failed: ${error.message}`;
+            } finally {
+                isProcessing = false;
+                processingOverlay.style.display = 'none';
+            }
+        }
+        
+        // Update Live Results
+        function updateLiveResults(result) {
+            const timestamp = new Date(result.timestamp).toLocaleString();
+            
+            liveTimestamp.textContent = timestamp;
+            liveText.textContent = result.detected_text || 'No text detected';
+            liveImplantType.textContent = result.implant_type || '-';
+            liveGTIN.textContent = result.gtin || '-';
+            liveLOT.textContent = result.lot || '-';
+            liveExpiration.textContent = result.expiration_date || '-';
+            liveSterile.textContent = result.sterile || '-';
+            liveSize.textContent = result.size || '-';
+        }
+        
+        // Add Saved Result
+        function addSavedResult(result) {
+            const timestamp = new Date(result.timestamp).toLocaleString();
+            
+            const element = document.createElement('div');
+            element.className = 'result-item';
+            element.innerHTML = `
+                <div class="result-header">
+                    <span>Saved Item #${result.image_id}</span>
+                    <span>${timestamp}</span>
+                </div>
+                <div class="result-content">
+                    <div class="result-data">
+                        <span class="data-label">Implant Type:</span>
+                        <span>${result.implant_type || '-'}</span>
+                        
+                        <span class="data-label">GTIN:</span>
+                        <span>${result.gtin || '-'}</span>
+                        
+                        <span class="data-label">LOT:</span>
+                        <span>${result.lot || '-'}</span>
+                        
+                        <span class="data-label">Expiration:</span>
+                        <span>${result.expiration_date || '-'}</span>
+                        
+                        <span class="data-label">Sterile:</span>
+                        <span>${result.sterile || '-'}</span>
+                        
+                        <span class="data-label">Size:</span>
+                        <span>${result.size || '-'}</span>
+                    </div>
+                </div>
+            `;
+            
+            savedResults.prepend(element);
+        }
+        
+        // Clean up on page close
+        window.addEventListener('beforeunload', () => {
+            if (intervalId) {
+                clearInterval(intervalId);
+            }
+            
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+        });
+        
+        // Initialize tab content visibility
+        document.addEventListener('DOMContentLoaded', () => {
+            tabContents.forEach((content, index) => {
+                if (index !== 0) {
+                    content.classList.add('hidden');
+                }
+            });
+        });
+    </script>
+</body>
+</html> 
