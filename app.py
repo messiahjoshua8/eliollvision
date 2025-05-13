@@ -54,8 +54,8 @@ if Groq is not None:
         default_api_key = os.getenv("GROQ_API_KEY")
         if default_api_key:
             print(f"Found API key in environment variables (length: {len(default_api_key)})")
-            # Create client with minimal parameters
-            default_client = Groq(api_key=default_api_key)
+            # Create client with our wrapper function
+            default_client = create_groq_client(default_api_key)
             # Test that the client works
             print("Testing Groq client initialization...")
             _ = default_client.base_url  # Just access a property to verify initialization
@@ -150,7 +150,7 @@ def analyze_image_with_llm(image_data: bytes, api_key: Optional[str] = None) -> 
     if api_key:
         try:
             print(f"Using custom API key provided in request header (length: {len(api_key)})")
-            client = Groq(api_key=api_key)
+            client = create_groq_client(api_key)
         except Exception as e:
             print(f"Error initializing custom Groq client: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Error initializing custom Groq client: {str(e)}")
@@ -284,7 +284,7 @@ async def health_check(x_groq_api_key: Optional[str] = Header(None)):
     if x_groq_api_key and Groq is not None:
         try:
             print(f"Health check with custom API key (length: {len(x_groq_api_key)})")
-            test_client = Groq(api_key=x_groq_api_key)
+            test_client = create_groq_client(x_groq_api_key)
             
             # Just try to access a property to verify it's initialized properly
             _ = test_client.base_url
@@ -331,7 +331,7 @@ async def test_api_key(key: Optional[str] = None):
     # Try to create a client and make a simple API call
     try:
         print(f"Testing API key (length: {len(key)})")
-        client = Groq(api_key=key)
+        client = create_groq_client(key)
         
         # Try to list models (a simple API call)
         print("Making test API call...")
@@ -342,6 +342,34 @@ async def test_api_key(key: Optional[str] = None):
             return {"status": "error", "message": f"API key accepted but API call failed: {str(e)}"}
     except Exception as e:
         return {"status": "error", "message": f"Failed to initialize client: {str(e)}"}
+
+# Add a custom wrapper for Groq client initialization to handle the proxies issue
+def create_groq_client(api_key):
+    """Create a Groq client while handling version differences."""
+    try:
+        # Try direct initialization first
+        return Groq(api_key=api_key)
+    except TypeError as e:
+        error_msg = str(e)
+        if "unexpected keyword argument 'proxies'" in error_msg:
+            print("Detected 'proxies' parameter issue, using monkey patch")
+            # Monkey patch the Groq class to handle the issue
+            original_init = Groq.__init__
+            
+            def patched_init(self, *args, **kwargs):
+                # Remove problematic parameters
+                if 'proxies' in kwargs:
+                    del kwargs['proxies']
+                return original_init(self, *args, **kwargs)
+            
+            # Apply the monkey patch
+            Groq.__init__ = patched_init
+            
+            # Try again with the patched init
+            return Groq(api_key=api_key)
+        else:
+            # If it's a different TypeError, re-raise it
+            raise
 
 if __name__ == "__main__":
     import uvicorn
