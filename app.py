@@ -37,6 +37,92 @@ except Exception as e:
 from dotenv import load_dotenv
 import requests  # Add this import at the top
 
+# Define a fallback class that mimics the Groq client but uses requests directly
+class FallbackGroqClient:
+    """A fallback implementation that mimics the Groq client interface but uses requests directly."""
+    def __init__(self, api_key):
+        self.api_key = api_key
+        self.base_url = "https://api.groq.com/openai/v1"
+        self.headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        # Create a models property that has a list method
+        class Models:
+            def __init__(self, client):
+                self.client = client
+            
+            def list(self):
+                response = requests.get(f"{self.client.base_url}/models", headers=self.client.headers)
+                if response.status_code != 200:
+                    raise Exception(f"API error: {response.status_code} - {response.text}")
+                return self.format_response(response.json())
+            
+            def format_response(self, json_data):
+                # Convert the JSON response to a structure that matches the expected Groq client format
+                class ModelListResponse:
+                    def __init__(self, data):
+                        self.data = data
+                return ModelListResponse(json_data["data"])
+                
+        self.models = Models(self)
+        
+        # Create a chat property that has a completions subproperty with a create method
+        class Completions:
+            def __init__(self, client):
+                self.client = client
+            
+            def create(self, model, messages, temperature=0.7, max_tokens=1024, top_p=1, stream=False):
+                data = {
+                    "model": model,
+                    "messages": messages,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                    "top_p": top_p,
+                    "stream": stream
+                }
+                response = requests.post(
+                    f"{self.client.base_url}/chat/completions", 
+                    headers=self.client.headers,
+                    json=data
+                )
+                
+                if response.status_code != 200:
+                    raise Exception(f"API error: {response.status_code} - {response.text}")
+                    
+                # Format the response to match what the Groq client would return
+                return self.format_response(response.json())
+            
+            def format_response(self, json_data):
+                # Convert the JSON response to a structure that matches the expected Groq client format
+                class Choice:
+                    def __init__(self, message):
+                        self.message = message
+                
+                class Message:
+                    def __init__(self, content, role):
+                        self.content = content
+                        self.role = role
+                
+                class CompletionResponse:
+                    def __init__(self, choices):
+                        self.choices = choices
+                
+                # Create the Message object from the response
+                message = Message(
+                    json_data["choices"][0]["message"]["content"],
+                    json_data["choices"][0]["message"]["role"]
+                )
+                
+                # Create the Choice object with the message
+                choice = Choice(message)
+                
+                # Return a CompletionResponse with the choices
+                return CompletionResponse([choice])
+        
+        # Create the chat.completions nested attribute
+        self.chat = type('Chat', (), {'completions': Completions(self)})()
+
 # Define the create_groq_client function before it's used
 def create_groq_client(api_key):
     """Create a Groq client while handling version differences."""
@@ -50,8 +136,17 @@ def create_groq_client(api_key):
         _ = client.base_url
         return client
     except Exception as e:
-        print(f"Error creating Groq client: {str(e)}")
-        raise
+        print(f"Error creating Groq client with standard approach: {str(e)}")
+        # Try using our fallback implementation
+        try:
+            print("Using fallback Groq client implementation")
+            fallback_client = FallbackGroqClient(api_key)
+            # Test that it works
+            _ = fallback_client.base_url
+            return fallback_client
+        except Exception as e2:
+            print(f"Error creating fallback Groq client: {str(e2)}")
+            raise
 
 # Try to import OpenCV, but continue if it fails
 try:
@@ -174,23 +269,12 @@ def extract_medical_supply_info(text: str) -> dict:
     return result
 
 def analyze_image_with_llm(image_data: bytes, api_key: Optional[str] = None) -> str:
-    """Send image to Groq LLM for analysis."""
-    if Groq is None:
-        raise HTTPException(status_code=500, detail=f"Groq module import failed: {GROQ_IMPORT_ERROR}")
+    """Send image to Groq LLM for analysis using direct API calls."""
+    # Use provided API key or fallback to environment variable
+    groq_api_key = api_key or os.getenv("GROQ_API_KEY")
     
-    # Use custom API key if provided, otherwise use default client
-    client = default_client
-    if api_key:
-        try:
-            print(f"Using custom API key provided in request header (length: {len(api_key)})")
-            client = create_groq_client(api_key)
-        except Exception as e:
-            print(f"Error initializing custom Groq client: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"Error initializing custom Groq client: {str(e)}")
-    
-    if client is None:
-        print("No Groq client available. Default client initialized: ", default_client is not None)
-        raise HTTPException(status_code=500, detail="Groq client not initialized. Please check your API key.")
+    if not groq_api_key:
+        raise HTTPException(status_code=500, detail="No Groq API key provided or found in environment")
     
     # Convert image to base64
     base64_image = base64.b64encode(image_data).decode('utf-8')
@@ -218,20 +302,40 @@ def analyze_image_with_llm(image_data: bytes, api_key: Optional[str] = None) -> 
         }
     ]
     
+    # Prepare the request payload
+    data = {
+        "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+        "messages": messages,
+        "temperature": 0.2,
+        "max_tokens": 1024,
+        "top_p": 1
+    }
+    
+    # Prepare headers with authorization
+    headers = {
+        "Authorization": f"Bearer {groq_api_key}",
+        "Content-Type": "application/json"
+    }
+    
     try:
-        # Call the Groq API
+        # Call the Groq API directly
         print("Calling Groq API with model: meta-llama/llama-4-scout-17b-16e-instruct")
-        completion = client.chat.completions.create(
-            model="meta-llama/llama-4-scout-17b-16e-instruct",
-            messages=messages,
-            temperature=0.2,  # Lower temperature for more consistent results
-            max_tokens=1024,
-            top_p=1,
-            stream=False,
+        response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers=headers,
+            json=data
         )
         
-        # Return the model's response
-        return completion.choices[0].message.content
+        # Check for errors
+        if response.status_code != 200:
+            error_detail = f"API error: {response.status_code} - {response.text}"
+            print(error_detail)
+            raise HTTPException(status_code=500, detail=error_detail)
+        
+        # Parse and return the model's response
+        response_data = response.json()
+        return response_data["choices"][0]["message"]["content"]
+        
     except Exception as e:
         error_message = str(e)
         print(f"Groq API error: {error_message}")
