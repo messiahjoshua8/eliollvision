@@ -47,7 +47,26 @@ try:
     default_api_key = os.getenv("GROQ_API_KEY") or os.getenv("groq_api_key") or os.getenv("Groq_Api_Key")
     if default_api_key:
         print(f"Initializing Groq client with API key (length: {len(default_api_key)})")
-        default_client = Groq(api_key=default_api_key)
+        try:
+            # Try with the standard initialization
+            default_client = Groq(api_key=default_api_key)
+        except TypeError as te:
+            # Check if it's the proxies error
+            if "unexpected keyword argument 'proxies'" in str(te):
+                print("Detected older Groq client version, removing proxies parameter")
+                # Try an alternative initialization without proxies
+                import inspect
+                groq_init_params = inspect.signature(Groq.__init__).parameters
+                valid_params = {
+                    "api_key": default_api_key,
+                }
+                # Only add base_url if it's a valid parameter
+                if "base_url" in groq_init_params:
+                    valid_params["base_url"] = "https://api.groq.com/openai/v1"
+                
+                default_client = Groq(**valid_params)
+            else:
+                raise
     else:
         print("No Groq API key found in environment variables")
 except Exception as e:
@@ -133,7 +152,26 @@ def analyze_image_with_llm(image_data: bytes, api_key: Optional[str] = None) -> 
     if api_key:
         try:
             print(f"Using custom API key provided in request header (length: {len(api_key)})")
-            client = Groq(api_key=api_key)
+            try:
+                # Try standard initialization
+                client = Groq(api_key=api_key)
+            except TypeError as te:
+                # Check if it's the proxies error
+                if "unexpected keyword argument 'proxies'" in str(te):
+                    print("Detected older Groq client version for custom key, removing proxies parameter")
+                    # Try an alternative initialization without proxies
+                    import inspect
+                    groq_init_params = inspect.signature(Groq.__init__).parameters
+                    valid_params = {
+                        "api_key": api_key,
+                    }
+                    # Only add base_url if it's a valid parameter
+                    if "base_url" in groq_init_params:
+                        valid_params["base_url"] = "https://api.groq.com/openai/v1"
+                    
+                    client = Groq(**valid_params)
+                else:
+                    raise
         except Exception as e:
             print(f"Error initializing custom Groq client: {str(e)}")
     
@@ -265,7 +303,27 @@ async def health_check(x_groq_api_key: Optional[str] = Header(None)):
     if x_groq_api_key:
         try:
             print(f"Health check with custom API key (length: {len(x_groq_api_key)})")
-            test_client = Groq(api_key=x_groq_api_key)
+            try:
+                # Try standard initialization
+                test_client = Groq(api_key=x_groq_api_key)
+            except TypeError as te:
+                # Check if it's the proxies error
+                if "unexpected keyword argument 'proxies'" in str(te):
+                    print("Detected older Groq client version in health check, removing proxies parameter")
+                    # Try an alternative initialization without proxies
+                    import inspect
+                    groq_init_params = inspect.signature(Groq.__init__).parameters
+                    valid_params = {
+                        "api_key": x_groq_api_key,
+                    }
+                    # Only add base_url if it's a valid parameter
+                    if "base_url" in groq_init_params:
+                        valid_params["base_url"] = "https://api.groq.com/openai/v1"
+                    
+                    test_client = Groq(**valid_params)
+                else:
+                    raise
+                    
             # Just try to access a property to verify it's initialized properly
             _ = test_client.base_url
             client_status = True
