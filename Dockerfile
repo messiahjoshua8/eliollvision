@@ -1,25 +1,31 @@
-FROM python:3.11-slim
+FROM python:3.11-slim-bullseye
 
 WORKDIR /app
 
 # Install system dependencies for OpenCV
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1 \
+    build-essential \
+    libgl1-mesa-glx \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
-    libxrender-dev \
+    libxrender1 \
     libfontconfig1 \
     && rm -rf /var/lib/apt/lists/*
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
 
 # Copy requirements first for better caching
 COPY requirements.txt .
 
-# Install Python dependencies
-# Force reinstall opencv-python-headless instead of opencv-python
-RUN pip install --no-cache-dir -r requirements.txt && \
-    pip uninstall -y opencv-python && \
-    pip install --no-cache-dir opencv-python-headless
+# Install Python dependencies with specific numpy version first
+RUN pip install --no-cache-dir numpy==1.24.3 && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip uninstall -y opencv-python-headless && \
+    pip install --no-cache-dir opencv-python-headless==4.8.1.78
 
 # Copy application code
 COPY . .

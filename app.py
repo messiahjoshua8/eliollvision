@@ -10,10 +10,17 @@ from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from PIL import Image
-import cv2
 import numpy as np
 from groq import Groq
 from dotenv import load_dotenv
+
+# Try to import OpenCV, but continue if it fails
+try:
+    import cv2
+    CV2_AVAILABLE = True
+except (ImportError, AttributeError):
+    print("WARNING: OpenCV (cv2) import failed. Some functionality may be limited.")
+    CV2_AVAILABLE = False
 
 # Load environment variables
 load_dotenv()
@@ -258,7 +265,8 @@ async def health_check(x_groq_api_key: Optional[str] = Header(None)):
     
     return {
         "status": "ok", 
-        "groq_client": client_status
+        "groq_client": client_status,
+        "opencv_available": CV2_AVAILABLE
     }
 
 if __name__ == "__main__":
